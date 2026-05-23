@@ -20,7 +20,6 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global;
 ScreenGui.Parent = CoreGui;
 ScreenGui.DisplayOrder = 20;
 ScreenGui.IgnoreGuiInset = True;
-ScreenGui.Draggable = True;
 
 local Toggles = {};
 local Options = {};
@@ -138,40 +137,146 @@ function Library:CreateLabel(Properties, IsHud)
 	table.insert(Library.TextObjects, _Instance);
 	return Library:Create(_Instance, Properties);
 end;
-
 function Library:MakeDraggable(Instance, Cutoff)
-	Instance.Active = true;
-	Instance.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			local ObjPos = Vector2.new(Mouse.X - Instance.AbsolutePosition.X, Mouse.Y - Instance.AbsolutePosition.Y);
-			if ObjPos.Y > (Cutoff or 40) then return; end;
-			while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-				Instance.Position = UDim2.new(0, Mouse.X - ObjPos.X + (Instance.Size.X.Offset * Instance.AnchorPoint.X), 0, Mouse.Y - ObjPos.Y + (Instance.Size.Y.Offset * Instance.AnchorPoint.Y));
-				RenderStepped:Wait();
-			end;
-		end;
-	end)
-end;
+	Instance.Active = true
 
-local DraggingGui = Instance.new("ScreenGui", gethui());
-function Library:MakeDraggableOutline(Instance, Cutoff)
-	Instance.Active = true;
+	local Dragging = false
+	local DragInput
+	local Start
+	local StartPos
+
+	local function Update(Input)
+		local Delta = Input.Position - Start
+
+		Instance.Position = UDim2.new(
+			StartPos.X.Scale,
+			StartPos.X.Offset + Delta.X,
+			StartPos.Y.Scale,
+			StartPos.Y.Offset + Delta.Y
+		)
+	end
+
 	Instance.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			local ObjPos = Vector2.new(Mouse.X - Instance.AbsolutePosition.X, Mouse.Y - Instance.AbsolutePosition.Y);
-			if ObjPos.Y > (Cutoff or 40) then return; end;
-			local frame = Library:Create("Frame", { Parent = DraggingGui; AnchorPoint = Instance.AnchorPoint; BackgroundTransparency = 1; Size = Instance.Size; Position = Instance.Position; });
-			local uistroke = Library:Create("UIStroke", { Parent = frame; Color = Library.AccentColor or Color3.new(0, 0, 0); });
-			while InputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
-				frame.Position = UDim2.new(0, Mouse.X - ObjPos.X + (Instance.Size.X.Offset * Instance.AnchorPoint.X), 0, Mouse.Y - ObjPos.Y + (Instance.Size.Y.Offset * Instance.AnchorPoint.Y));
-				uistroke.Color = Library.AccentColor or Color3.new(0, 0, 0);
-				RenderStepped:Wait();
-			end;
-			Instance.Position = UDim2.new(0, Mouse.X - ObjPos.X + (Instance.Size.X.Offset * Instance.AnchorPoint.X), 0, Mouse.Y - ObjPos.Y + (Instance.Size.Y.Offset * Instance.AnchorPoint.Y));
-			frame:Destroy();
-		end;
+		if Input.UserInputType == Enum.UserInputType.MouseButton1
+		or Input.UserInputType == Enum.UserInputType.Touch then
+
+			local Pos = Input.Position
+			local ObjPos = Vector2.new(
+				Pos.X - Instance.AbsolutePosition.X,
+				Pos.Y - Instance.AbsolutePosition.Y
+			)
+
+			if ObjPos.Y > (Cutoff or 40) then
+				return
+			end
+
+			Dragging = true
+			Start = Pos
+			StartPos = Instance.Position
+
+			Input.Changed:Connect(function()
+				if Input.UserInputState == Enum.UserInputState.End then
+					Dragging = false
+				end
+			end)
+		end
 	end)
-end;
+
+	Instance.InputChanged:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseMovement
+		or Input.UserInputType == Enum.UserInputType.Touch then
+			DragInput = Input
+		end
+	end)
+
+	InputService.InputChanged:Connect(function(Input)
+		if Input == DragInput and Dragging then
+			Update(Input)
+		end
+	end)
+end
+
+local DraggingGui = Instance.new("ScreenGui", gethui())
+
+function Library:MakeDraggableOutline(Instance, Cutoff)
+	Instance.Active = true
+
+	local Dragging = false
+	local DragInput
+	local Start
+	local StartPos
+
+	local frame
+	local uistroke
+
+	local function Update(Input)
+		local Delta = Input.Position - Start
+
+		frame.Position = UDim2.new(
+			StartPos.X.Scale,
+			StartPos.X.Offset + Delta.X,
+			StartPos.Y.Scale,
+			StartPos.Y.Offset + Delta.Y
+		)
+
+		uistroke.Color = Library.AccentColor or Color3.new(0,0,0)
+	end
+
+	Instance.InputBegan:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1
+		or Input.UserInputType == Enum.UserInputType.Touch then
+
+			local Pos = Input.Position
+			local ObjPos = Vector2.new(
+				Pos.X - Instance.AbsolutePosition.X,
+				Pos.Y - Instance.AbsolutePosition.Y
+			)
+
+			if ObjPos.Y > (Cutoff or 40) then
+				return
+			end
+
+			Dragging = true
+			Start = Pos
+			StartPos = Instance.Position
+
+			frame = Library:Create("Frame", {
+				Parent = DraggingGui;
+				AnchorPoint = Instance.AnchorPoint;
+				BackgroundTransparency = 1;
+				Size = Instance.Size;
+				Position = Instance.Position;
+			})
+
+			uistroke = Library:Create("UIStroke", {
+				Parent = frame;
+				Color = Library.AccentColor or Color3.new(0,0,0);
+			})
+
+			Input.Changed:Connect(function()
+				if Input.UserInputState == Enum.UserInputState.End then
+					Dragging = false
+
+					Instance.Position = frame.Position
+					frame:Destroy()
+				end
+			end)
+		end
+	end)
+
+	Instance.InputChanged:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseMovement
+		or Input.UserInputType == Enum.UserInputType.Touch then
+			DragInput = Input
+		end
+	end)
+
+	InputService.InputChanged:Connect(function(Input)
+		if Input == DragInput and Dragging then
+			Update(Input)
+		end
+	end)
+end
 
 function Library:AddToolTip(InfoStr, HoverInstance)
 	local X, Y = Library:GetTextBounds(InfoStr, Library.Font, 14);
